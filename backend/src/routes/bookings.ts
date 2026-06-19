@@ -132,8 +132,26 @@ router.get('/:id', (req: AuthRequest, res: Response): void => {
     }
 
     const { id: userId, role } = req.user!;
-    const isParty = row.resident_id === userId || row.professional_id === userId;
-    if (!isParty && role !== 'admin') {
+    const isResident    = row.resident_id === userId;
+    const isAssignedPro = row.professional_id === userId;
+
+    // A professional can also view a booking if it's open in their category
+    // (so they can read the details before quoting) or if they already quoted.
+    const canViewAsPro = role === 'professional' && (
+      (
+        ['pending_quote', 'quoted'].includes(row.status as string) &&
+        !!db.prepare(`
+          SELECT 1 FROM professional_categories pc
+          JOIN professionals p ON p.id = pc.professional_id
+          WHERE p.user_id = ? AND pc.category_id = ?
+        `).get(userId, row.category_id)
+      ) ||
+      !!db.prepare(
+        'SELECT 1 FROM quotes WHERE booking_id = ? AND professional_id = ?'
+      ).get(req.params.id, userId)
+    );
+
+    if (!isResident && !isAssignedPro && !canViewAsPro && role !== 'admin') {
       fail(res, 'Access denied', 403);
       return;
     }
