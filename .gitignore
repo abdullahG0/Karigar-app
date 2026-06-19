@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+.expo/
+.DS_Store
+Thumbs.db
+.claude/

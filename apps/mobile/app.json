@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Karigar",
+    "slug": "karigar",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#236646"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.karigar.app"
+    },
+    "android": {
+      "package": "com.karigar.app",
+      "softwareKeyboardLayoutMode": "pan",
+      "adaptiveIcon": {
+        "backgroundColor": "#236646",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

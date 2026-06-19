@@ -1,0 +1,25 @@
+{
+  "name": "parkview-homeservices",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/admin",
+    "apps/mobile",
+    "backend",
+    "shared"
+  ],
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:mobile": "cd apps/mobile && npx expo start",
+    "dev:admin": "cd apps/admin && npm run dev",
+    "dev": "concurrently -n backend,admin,mobile -c green,cyan,blue \"npm run dev:backend\" \"npm run dev:admin\" \"npm run dev:mobile\"",
+    "seed": "cd backend && npx ts-node src/scripts/seed.ts",
+    "build:shared": "npm run build --workspace=shared",
+    "build:backend": "npm run build --workspace=backend",
+    "build:admin": "npm run build --workspace=apps/admin",
+    "build:all": "npm run build:shared && npm run build:backend && npm run build:admin"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
