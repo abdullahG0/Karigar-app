@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -64,7 +65,7 @@ export default function JobDetailScreen({ route, navigation }: Props) {
     setUpdating(true);
     try {
       await api.patch(`/bookings/${booking_id}/status`, { status });
-      fetchBooking();
+      await fetchBooking();
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Could not update status.');
     } finally {
@@ -111,7 +112,10 @@ export default function JobDetailScreen({ route, navigation }: Props) {
       >
         {updating
           ? <ActivityIndicator color={colors.white} />
-          : <Text style={styles.actionBtnText}>🔧 Start Job</Text>
+          : <View style={styles.btnRow}>
+              <Ionicons name="construct-outline" size={18} color={colors.white} />
+              <Text style={styles.actionBtnText}>Start Job</Text>
+            </View>
         }
       </TouchableOpacity>
     );
@@ -125,14 +129,18 @@ export default function JobDetailScreen({ route, navigation }: Props) {
       >
         {updating
           ? <ActivityIndicator color={colors.white} />
-          : <Text style={styles.actionBtnText}>✅ Mark as Complete</Text>
+          : <View style={styles.btnRow}>
+              <Ionicons name="checkmark-circle-outline" size={18} color={colors.white} />
+              <Text style={styles.actionBtnText}>Mark as Complete</Text>
+            </View>
         }
       </TouchableOpacity>
     );
   } else if (booking.status === 'completed') {
     ActionSection = (
       <View style={styles.completedLabel}>
-        <Text style={styles.completedText}>✓ Job Completed</Text>
+        <Ionicons name="checkmark-done-circle" size={20} color={colors.success} />
+        <Text style={styles.completedText}>Job Completed</Text>
       </View>
     );
   }
@@ -197,7 +205,10 @@ export default function JobDetailScreen({ route, navigation }: Props) {
               })
             }
           >
-            <Text style={styles.chatBtnText}>💬 Chat with Resident</Text>
+            <View style={styles.btnRow}>
+              <Ionicons name="chatbubble-ellipses-outline" size={17} color={colors.primary} />
+              <Text style={styles.chatBtnText}>Chat with Resident</Text>
+            </View>
           </TouchableOpacity>
         )}
 
@@ -256,9 +267,13 @@ const styles = StyleSheet.create({
   actionBtnOff:   { opacity: 0.6 },
   actionBtnText:  { fontSize: 16, fontWeight: '700', color: colors.white },
 
+  btnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
   completedLabel: {
+    flexDirection: 'row', gap: 8,
     borderRadius: radius.lg, paddingVertical: 15,
-    alignItems: 'center', borderWidth: 1.5, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: colors.border,
   },
   completedText: { fontSize: 16, fontWeight: '700', color: colors.textMuted },
 });
