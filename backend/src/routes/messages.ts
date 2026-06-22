@@ -8,13 +8,15 @@ const router = Router();
 router.use(authenticate);
 
 // ── GET /api/messages/:booking_id ──────────────────────────────────────────────
-router.get('/:booking_id', (req: AuthRequest, res: Response): void => {
+router.get('/:booking_id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id: userId, role } = req.user!;
 
-    const booking = db.prepare(
-      'SELECT resident_id, professional_id FROM bookings WHERE id = ?'
-    ).get(req.params.booking_id) as { resident_id: string; professional_id: string | null } | undefined;
+    const { rows: bRows } = await db.query(
+      'SELECT resident_id, professional_id FROM bookings WHERE id = $1',
+      [req.params.booking_id]
+    );
+    const booking = bRows[0] as { resident_id: string; professional_id: string | null } | undefined;
 
     if (!booking) { fail(res, 'Booking not found', 404); return; }
 
@@ -23,13 +25,13 @@ router.get('/:booking_id', (req: AuthRequest, res: Response): void => {
       fail(res, 'Access denied', 403); return;
     }
 
-    const rows = db.prepare(`
+    const { rows } = await db.query(`
       SELECT m.*, u.name AS sender_name
       FROM messages m
       JOIN users u ON u.id = m.sender_id
-      WHERE m.booking_id = ?
+      WHERE m.booking_id = $1
       ORDER BY m.created_at ASC
-    `).all(req.params.booking_id);
+    `, [req.params.booking_id]);
 
     ok(res, rows);
   } catch (err) {
@@ -39,7 +41,7 @@ router.get('/:booking_id', (req: AuthRequest, res: Response): void => {
 });
 
 // ── POST /api/messages ─────────────────────────────────────────────────────────
-router.post('/', (req: AuthRequest, res: Response): void => {
+router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { booking_id, content } = req.body as {
       booking_id?: string;
@@ -54,10 +56,15 @@ router.post('/', (req: AuthRequest, res: Response): void => {
       fail(res, 'content must not be empty');
       return;
     }
+    if (content.trim().length > 2000) {
+      fail(res, 'Message must be 2000 characters or fewer'); return;
+    }
 
-    const booking = db.prepare(
-      'SELECT resident_id, professional_id FROM bookings WHERE id = ?'
-    ).get(booking_id) as { resident_id: string; professional_id: string | null } | undefined;
+    const { rows: bRows } = await db.query(
+      'SELECT resident_id, professional_id FROM bookings WHERE id = $1',
+      [booking_id]
+    );
+    const booking = bRows[0] as { resident_id: string; professional_id: string | null } | undefined;
 
     if (!booking) { fail(res, 'Booking not found', 404); return; }
 
@@ -66,23 +73,20 @@ router.post('/', (req: AuthRequest, res: Response): void => {
       fail(res, 'Access denied', 403); return;
     }
 
-    if (content.trim().length > 2000) {
-      fail(res, 'Message must be 2000 characters or fewer'); return;
-    }
-
     const id = uuidv4();
-    db.prepare(
-      'INSERT INTO messages (id, booking_id, sender_id, content) VALUES (?, ?, ?, ?)'
-    ).run(id, booking_id, req.user!.id, content.trim());
+    await db.query(
+      'INSERT INTO messages (id, booking_id, sender_id, content) VALUES ($1,$2,$3,$4)',
+      [id, booking_id, req.user!.id, content.trim()]
+    );
 
-    const message = db.prepare(`
+    const { rows } = await db.query(`
       SELECT m.*, u.name AS sender_name
       FROM messages m
       JOIN users u ON u.id = m.sender_id
-      WHERE m.id = ?
-    `).get(id);
+      WHERE m.id = $1
+    `, [id]);
 
-    ok(res, message, 201);
+    ok(res, rows[0], 201);
   } catch (err) {
     console.error('[POST /messages]', err);
     fail(res, 'Could not send message', 500);

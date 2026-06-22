@@ -8,20 +8,19 @@ const router = Router();
 router.use(authenticate);
 
 // ── GET /api/reviews/professional/:professionalUserId ──────────────────────────
-// Paginated — pass ?offset=10 for the next page (limit fixed at 10).
-router.get('/professional/:professionalUserId', (req: AuthRequest, res: Response): void => {
+router.get('/professional/:professionalUserId', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const offset = Math.max(0, parseInt((req.query.offset as string) ?? '0', 10) || 0);
 
-    const rows = db.prepare(`
+    const { rows } = await db.query(`
       SELECT r.id, r.rating, r.comment, r.created_at,
              u.name AS reviewer_name
       FROM reviews r
       JOIN users u ON u.id = r.resident_id
-      WHERE r.professional_id = ?
+      WHERE r.professional_id = $1
       ORDER BY r.created_at DESC
-      LIMIT 10 OFFSET ?
-    `).all(req.params.professionalUserId, offset);
+      LIMIT 10 OFFSET $2
+    `, [req.params.professionalUserId, offset]);
 
     ok(res, rows);
   } catch (err) {
@@ -31,7 +30,7 @@ router.get('/professional/:professionalUserId', (req: AuthRequest, res: Response
 });
 
 // ── POST /api/reviews  (resident only) ────────────────────────────────────────
-router.post('/', requireRole('resident'), (req: AuthRequest, res: Response): void => {
+router.post('/', requireRole('resident'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { booking_id, rating, comment } = req.body as {
       booking_id?: string;
@@ -50,9 +49,11 @@ router.post('/', requireRole('resident'), (req: AuthRequest, res: Response): voi
       return;
     }
 
-    const booking = db
-      .prepare('SELECT id, status, resident_id, professional_id FROM bookings WHERE id = ?')
-      .get(booking_id) as
+    const { rows: bRows } = await db.query(
+      'SELECT id, status, resident_id, professional_id FROM bookings WHERE id = $1',
+      [booking_id]
+    );
+    const booking = bRows[0] as
       | { id: string; status: string; resident_id: string; professional_id: string | null }
       | undefined;
 
@@ -73,31 +74,34 @@ router.post('/', requireRole('resident'), (req: AuthRequest, res: Response): voi
       return;
     }
 
-    // Explicit duplicate check before insert.
-    const existing = db
-      .prepare('SELECT id FROM reviews WHERE booking_id = ?')
-      .get(booking_id);
-    if (existing) {
+    const { rows: existing } = await db.query(
+      'SELECT id FROM reviews WHERE booking_id = $1',
+      [booking_id]
+    );
+    if (existing.length > 0) {
       fail(res, 'A review for this booking already exists', 409);
       return;
     }
 
     const id = uuidv4();
-    db.prepare(
-      'INSERT INTO reviews (id, booking_id, resident_id, professional_id, rating, comment) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(id, booking_id, req.user!.id, booking.professional_id, ratingNum, comment ?? null);
-
-    // Recalculate the professional's average rating (one decimal place).
-    const { avg_rating } = db.prepare(
-      'SELECT AVG(CAST(rating AS REAL)) AS avg_rating FROM reviews WHERE professional_id = ?'
-    ).get(booking.professional_id) as { avg_rating: number };
-
-    db.prepare('UPDATE professionals SET rating = ? WHERE user_id = ?').run(
-      Math.round(avg_rating * 10) / 10,
-      booking.professional_id
+    await db.query(
+      'INSERT INTO reviews (id, booking_id, resident_id, professional_id, rating, comment) VALUES ($1,$2,$3,$4,$5,$6)',
+      [id, booking_id, req.user!.id, booking.professional_id, ratingNum, comment ?? null]
     );
 
-    ok(res, db.prepare('SELECT * FROM reviews WHERE id = ?').get(id), 201);
+    // Recalculate professional's average rating.
+    const { rows: avgRows } = await db.query(
+      'SELECT AVG(rating::numeric) AS avg_rating FROM reviews WHERE professional_id = $1',
+      [booking.professional_id]
+    );
+    const avg_rating = parseFloat(avgRows[0].avg_rating) || 0;
+    await db.query('UPDATE professionals SET rating = $1 WHERE user_id = $2', [
+      Math.round(avg_rating * 10) / 10,
+      booking.professional_id,
+    ]);
+
+    const { rows: revRows } = await db.query('SELECT * FROM reviews WHERE id = $1', [id]);
+    ok(res, revRows[0], 201);
   } catch (err) {
     console.error('[POST /reviews]', err);
     fail(res, 'Could not submit review', 500);

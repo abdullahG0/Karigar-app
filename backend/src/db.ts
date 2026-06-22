@@ -1,6 +1,6 @@
-// Shim: routes that do `import db from '../db'` get the live Database instance.
-// The singleton is initialised by the time any route module is required
-// because index.ts imports dotenv/config first.
+import { Pool } from 'pg';
 import { getDb } from './database/setup';
 
-export default getDb();
+// All routes import `db` and call pool.query() on it.
+const db: Pool = getDb();
+export default db;

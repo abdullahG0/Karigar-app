@@ -18,7 +18,6 @@ export function initializeSocket(httpServer: http.Server): SocketServer {
   _io = io;
 
   io.on('connection', (socket) => {
-    // Verify JWT token from handshake — disconnect unauthenticated clients.
     const token = socket.handshake.auth.token as string | undefined;
     let userId: string | undefined;
 
@@ -32,7 +31,6 @@ export function initializeSocket(httpServer: http.Server): SocketServer {
         return;
       }
     } else {
-      // Fallback: accept userId directly only in dev (no token sent yet).
       userId = socket.handshake.auth.userId as string | undefined;
     }
 
@@ -54,7 +52,7 @@ export function initializeSocket(httpServer: http.Server): SocketServer {
     // ── Messaging ────────────────────────────────────────────────────────────
     socket.on(
       'send_message',
-      ({
+      async ({
         booking_id,
         content,
       }: {
@@ -66,24 +64,22 @@ export function initializeSocket(httpServer: http.Server): SocketServer {
           if (!userId || !booking_id || !content?.trim()) return;
           if (content.trim().length > 2000) return;
 
-          // Ensure sender is a party to this booking.
-          const booking = db.prepare(
-            'SELECT resident_id, professional_id FROM bookings WHERE id = ?'
-          ).get(booking_id) as { resident_id: string; professional_id: string | null } | undefined;
+          const { rows: bRows } = await db.query(
+            'SELECT resident_id, professional_id FROM bookings WHERE id = $1',
+            [booking_id]
+          );
+          const booking = bRows[0] as { resident_id: string; professional_id: string | null } | undefined;
           if (!booking) return;
           if (booking.resident_id !== userId && booking.professional_id !== userId) return;
 
           const id = uuidv4();
-          db.prepare(
-            'INSERT INTO messages (id, booking_id, sender_id, content) VALUES (?, ?, ?, ?)'
-          ).run(id, booking_id, userId, content.trim());
+          await db.query(
+            'INSERT INTO messages (id, booking_id, sender_id, content) VALUES ($1,$2,$3,$4)',
+            [id, booking_id, userId, content.trim()]
+          );
 
-          const message = db
-            .prepare('SELECT * FROM messages WHERE id = ?')
-            .get(id);
-
-          // Emit to ALL sockets in the room (including sender).
-          io.to(`booking_${booking_id}`).emit('new_message', message);
+          const { rows: msgRows } = await db.query('SELECT * FROM messages WHERE id = $1', [id]);
+          io.to(`booking_${booking_id}`).emit('new_message', msgRows[0]);
         } catch (err) {
           console.error('[socket:send_message]', err);
         }
@@ -91,13 +87,10 @@ export function initializeSocket(httpServer: http.Server): SocketServer {
     );
 
     // ── Typing indicator ─────────────────────────────────────────────────────
-    socket.on(
-      'typing',
-      ({ booking_id }: { booking_id: string }) => {
-        if (!userId || !booking_id) return;
-        socket.to(`booking_${booking_id}`).emit('user_typing', { booking_id, sender_id: userId });
-      }
-    );
+    socket.on('typing', ({ booking_id }: { booking_id: string }) => {
+      if (!userId || !booking_id) return;
+      socket.to(`booking_${booking_id}`).emit('user_typing', { booking_id, sender_id: userId });
+    });
 
     // ── Disconnect ───────────────────────────────────────────────────────────
     socket.on('disconnect', () => {

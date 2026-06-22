@@ -7,11 +7,11 @@ import { ok, fail } from '../middleware/respond';
 const router = Router();
 
 // GET /api/categories
-router.get('/', (_req: Request, res: Response): void => {
+router.get('/', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const rows = db
-      .prepare('SELECT * FROM service_categories WHERE is_active = 1 ORDER BY name')
-      .all();
+    const { rows } = await db.query(
+      'SELECT * FROM service_categories WHERE is_active = true ORDER BY name'
+    );
     ok(res, rows);
   } catch (err) {
     console.error('[GET /categories]', err);
@@ -20,17 +20,17 @@ router.get('/', (_req: Request, res: Response): void => {
 });
 
 // GET /api/categories/:id
-router.get('/:id', (req: Request, res: Response): void => {
+router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const row = db
-      .prepare('SELECT * FROM service_categories WHERE id = ?')
-      .get(req.params.id);
-
-    if (!row) {
+    const { rows } = await db.query(
+      'SELECT * FROM service_categories WHERE id = $1',
+      [req.params.id]
+    );
+    if (rows.length === 0) {
       fail(res, 'Category not found', 404);
       return;
     }
-    ok(res, row);
+    ok(res, rows[0]);
   } catch (err) {
     console.error('[GET /categories/:id]', err);
     fail(res, 'Could not fetch category', 500);
@@ -38,7 +38,7 @@ router.get('/:id', (req: Request, res: Response): void => {
 });
 
 // POST /api/categories  (admin only)
-router.post('/', authenticate, requireRole('admin'), (req: AuthRequest, res: Response): void => {
+router.post('/', authenticate, requireRole('admin'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { name, icon_name, description, base_price_min, base_price_max } = req.body as {
       name?: string;
@@ -54,12 +54,13 @@ router.post('/', authenticate, requireRole('admin'), (req: AuthRequest, res: Res
     }
 
     const id = uuidv4();
-    db.prepare(`
+    await db.query(`
       INSERT INTO service_categories (id, name, icon_name, description, base_price_min, base_price_max)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, name, icon_name, description ?? null, base_price_min ?? null, base_price_max ?? null);
+      VALUES ($1,$2,$3,$4,$5,$6)
+    `, [id, name, icon_name, description ?? null, base_price_min ?? null, base_price_max ?? null]);
 
-    ok(res, db.prepare('SELECT * FROM service_categories WHERE id = ?').get(id), 201);
+    const { rows } = await db.query('SELECT * FROM service_categories WHERE id = $1', [id]);
+    ok(res, rows[0], 201);
   } catch (err) {
     console.error('[POST /categories]', err);
     fail(res, 'Could not create category', 500);
@@ -67,35 +68,32 @@ router.post('/', authenticate, requireRole('admin'), (req: AuthRequest, res: Res
 });
 
 // PATCH /api/categories/:id  (admin only)
-router.patch('/:id', authenticate, requireRole('admin'), (req: AuthRequest, res: Response): void => {
+router.patch('/:id', authenticate, requireRole('admin'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { name, icon_name, description, base_price_min, base_price_max, is_active } = req.body;
 
-    db.prepare(`
+    await db.query(`
       UPDATE service_categories SET
-        name           = COALESCE(?, name),
-        icon_name      = COALESCE(?, icon_name),
-        description    = COALESCE(?, description),
-        base_price_min = COALESCE(?, base_price_min),
-        base_price_max = COALESCE(?, base_price_max),
-        is_active      = COALESCE(?, is_active)
-      WHERE id = ?
-    `).run(
+        name           = COALESCE($1, name),
+        icon_name      = COALESCE($2, icon_name),
+        description    = COALESCE($3, description),
+        base_price_min = COALESCE($4, base_price_min),
+        base_price_max = COALESCE($5, base_price_max),
+        is_active      = COALESCE($6, is_active)
+      WHERE id = $7
+    `, [
       name ?? null, icon_name ?? null, description ?? null,
       base_price_min ?? null, base_price_max ?? null,
-      is_active !== undefined ? (is_active ? 1 : 0) : null,
-      req.params.id
-    );
+      is_active !== undefined ? Boolean(is_active) : null,
+      req.params.id,
+    ]);
 
-    const category = db
-      .prepare('SELECT * FROM service_categories WHERE id = ?')
-      .get(req.params.id);
-
-    if (!category) {
+    const { rows } = await db.query('SELECT * FROM service_categories WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) {
       fail(res, 'Category not found', 404);
       return;
     }
-    ok(res, category);
+    ok(res, rows[0]);
   } catch (err) {
     console.error('[PATCH /categories/:id]', err);
     fail(res, 'Could not update category', 500);

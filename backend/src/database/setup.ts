@@ -1,29 +1,31 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { Pool } from 'pg';
 
-let _db: Database.Database | null = null;
+let _pool: Pool | null = null;
 
-export function getDb(): Database.Database {
-  if (_db) return _db;
+export function getDb(): Pool {
+  if (_pool) return _pool;
 
-  const dbPath = process.env.DB_PATH
-    ? path.resolve(process.env.DB_PATH)
-    : path.resolve('./database.sqlite');
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('DATABASE_URL environment variable is required');
 
-  _db = new Database(dbPath);
-  _db.pragma('journal_mode = WAL');
-  _db.pragma('foreign_keys = ON');
-  applySchema(_db);
-  return _db;
+  _pool = new Pool({
+    connectionString: url,
+    ssl: url.includes('localhost') || url.includes('127.0.0.1')
+      ? undefined
+      : { rejectUnauthorized: false },
+  });
+
+  return _pool;
 }
 
-function applySchema(db: Database.Database): void {
-  db.exec(`
+export async function applySchema(): Promise<void> {
+  const pool = getDb();
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS societies (
-      id       TEXT PRIMARY KEY,
-      name     TEXT,
-      city     TEXT,
-      is_active INTEGER DEFAULT 1
+      id        TEXT PRIMARY KEY,
+      name      TEXT,
+      city      TEXT,
+      is_active BOOLEAN DEFAULT true
     );
 
     CREATE TABLE IF NOT EXISTS users (
@@ -33,7 +35,7 @@ function applySchema(db: Database.Database): void {
       password_hash TEXT,
       role          TEXT NOT NULL CHECK(role IN ('resident','professional','admin')),
       society_id    TEXT REFERENCES societies(id),
-      created_at    TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at    TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS service_categories (
@@ -43,7 +45,7 @@ function applySchema(db: Database.Database): void {
       description    TEXT,
       base_price_min INTEGER,
       base_price_max INTEGER,
-      is_active      INTEGER DEFAULT 1
+      is_active      BOOLEAN DEFAULT true
     );
 
     CREATE TABLE IF NOT EXISTS professionals (
@@ -51,11 +53,11 @@ function applySchema(db: Database.Database): void {
       user_id      TEXT UNIQUE REFERENCES users(id),
       bio          TEXT,
       hourly_rate  INTEGER,
-      is_verified  INTEGER DEFAULT 0,
-      is_available INTEGER DEFAULT 1,
-      rating       REAL    DEFAULT 0,
+      is_verified  BOOLEAN DEFAULT false,
+      is_available BOOLEAN DEFAULT true,
+      rating       NUMERIC(3,1) DEFAULT 0,
       total_jobs   INTEGER DEFAULT 0,
-      created_at   TEXT    DEFAULT CURRENT_TIMESTAMP
+      created_at   TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS professional_categories (
@@ -71,23 +73,23 @@ function applySchema(db: Database.Database): void {
       category_id         TEXT REFERENCES service_categories(id),
       status              TEXT DEFAULT 'pending_quote'
         CHECK(status IN ('pending_quote','quoted','confirmed','in_progress','completed','cancelled')),
-      scheduled_at        TEXT,
+      scheduled_at        TIMESTAMPTZ,
       address             TEXT NOT NULL,
       problem_description TEXT,
-      quote_amount        REAL,
-      final_amount        REAL,
-      created_at          TEXT DEFAULT CURRENT_TIMESTAMP
+      quote_amount        NUMERIC,
+      final_amount        NUMERIC,
+      created_at          TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS quotes (
       id              TEXT PRIMARY KEY,
       booking_id      TEXT REFERENCES bookings(id),
       professional_id TEXT REFERENCES users(id),
-      amount          REAL NOT NULL,
+      amount          NUMERIC NOT NULL,
       note            TEXT,
       status          TEXT DEFAULT 'pending'
         CHECK(status IN ('pending','accepted','rejected')),
-      created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at      TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -95,7 +97,7 @@ function applySchema(db: Database.Database): void {
       booking_id TEXT REFERENCES bookings(id),
       sender_id  TEXT REFERENCES users(id),
       content    TEXT NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS reviews (
@@ -105,17 +107,17 @@ function applySchema(db: Database.Database): void {
       professional_id TEXT REFERENCES users(id),
       rating          INTEGER CHECK(rating BETWEEN 1 AND 5),
       comment         TEXT,
-      created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at      TIMESTAMPTZ DEFAULT NOW()
     );
 
-    CREATE INDEX IF NOT EXISTS idx_bookings_resident    ON bookings(resident_id);
+    CREATE INDEX IF NOT EXISTS idx_bookings_resident     ON bookings(resident_id);
     CREATE INDEX IF NOT EXISTS idx_bookings_professional ON bookings(professional_id);
-    CREATE INDEX IF NOT EXISTS idx_bookings_category    ON bookings(category_id);
-    CREATE INDEX IF NOT EXISTS idx_bookings_status      ON bookings(status);
-    CREATE INDEX IF NOT EXISTS idx_quotes_booking       ON quotes(booking_id);
-    CREATE INDEX IF NOT EXISTS idx_quotes_professional  ON quotes(professional_id);
-    CREATE INDEX IF NOT EXISTS idx_messages_booking     ON messages(booking_id);
-    CREATE INDEX IF NOT EXISTS idx_reviews_professional ON reviews(professional_id);
-    CREATE INDEX IF NOT EXISTS idx_prof_cats_category   ON professional_categories(category_id);
+    CREATE INDEX IF NOT EXISTS idx_bookings_category     ON bookings(category_id);
+    CREATE INDEX IF NOT EXISTS idx_bookings_status       ON bookings(status);
+    CREATE INDEX IF NOT EXISTS idx_quotes_booking        ON quotes(booking_id);
+    CREATE INDEX IF NOT EXISTS idx_quotes_professional   ON quotes(professional_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_booking      ON messages(booking_id);
+    CREATE INDEX IF NOT EXISTS idx_reviews_professional  ON reviews(professional_id);
+    CREATE INDEX IF NOT EXISTS idx_prof_cats_category    ON professional_categories(category_id);
   `);
 }

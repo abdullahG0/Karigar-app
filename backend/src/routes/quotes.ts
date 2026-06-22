@@ -9,15 +9,16 @@ const router = Router();
 router.use(authenticate);
 
 // ── GET /api/quotes/booking/:bookingId ─────────────────────────────────────────
-// Resident who owns the booking, or any professional who submitted a quote.
-router.get('/booking/:bookingId', (req: AuthRequest, res: Response): void => {
+router.get('/booking/:bookingId', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id: userId, role } = req.user!;
     const { bookingId } = req.params;
 
-    const booking = db
-      .prepare('SELECT id, resident_id FROM bookings WHERE id = ?')
-      .get(bookingId) as { id: string; resident_id: string } | undefined;
+    const { rows: bRows } = await db.query(
+      'SELECT id, resident_id FROM bookings WHERE id = $1',
+      [bookingId]
+    );
+    const booking = bRows[0] as { id: string; resident_id: string } | undefined;
 
     if (!booking) {
       fail(res, 'Booking not found', 404);
@@ -25,23 +26,28 @@ router.get('/booking/:bookingId', (req: AuthRequest, res: Response): void => {
     }
 
     const isOwner = role === 'resident' && booking.resident_id === userId;
-    const hasQuoted = role === 'professional' && !!db
-      .prepare('SELECT id FROM quotes WHERE booking_id = ? AND professional_id = ?')
-      .get(bookingId, userId);
+    let hasQuoted = false;
+    if (role === 'professional') {
+      const { rows: qRows } = await db.query(
+        'SELECT id FROM quotes WHERE booking_id = $1 AND professional_id = $2',
+        [bookingId, userId]
+      );
+      hasQuoted = qRows.length > 0;
+    }
 
     if (!isOwner && !hasQuoted && role !== 'admin') {
       fail(res, 'Access denied', 403);
       return;
     }
 
-    const rows = db.prepare(`
+    const { rows } = await db.query(`
       SELECT q.*, u.name AS professional_name, p.rating AS professional_rating
       FROM quotes q
       JOIN users u ON u.id = q.professional_id
       LEFT JOIN professionals p ON p.user_id = q.professional_id
-      WHERE q.booking_id = ?
+      WHERE q.booking_id = $1
       ORDER BY q.created_at ASC
-    `).all(bookingId);
+    `, [bookingId]);
 
     ok(res, rows);
   } catch (err) {
@@ -51,7 +57,7 @@ router.get('/booking/:bookingId', (req: AuthRequest, res: Response): void => {
 });
 
 // ── POST /api/quotes  (professional only) ──────────────────────────────────────
-router.post('/', requireRole('professional'), (req: AuthRequest, res: Response): void => {
+router.post('/', requireRole('professional'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { booking_id, amount, note } = req.body as {
       booking_id?: string;
@@ -68,9 +74,11 @@ router.post('/', requireRole('professional'), (req: AuthRequest, res: Response):
       return;
     }
 
-    const booking = db
-      .prepare('SELECT id, status FROM bookings WHERE id = ?')
-      .get(booking_id) as { id: string; status: string } | undefined;
+    const { rows: bRows } = await db.query(
+      'SELECT id, status FROM bookings WHERE id = $1',
+      [booking_id]
+    );
+    const booking = bRows[0] as { id: string; status: string } | undefined;
 
     if (!booking) {
       fail(res, 'Booking not found', 404);
@@ -81,33 +89,36 @@ router.post('/', requireRole('professional'), (req: AuthRequest, res: Response):
       return;
     }
 
-    // Prevent a professional from quoting the same booking twice.
-    const existing = db
-      .prepare('SELECT id FROM quotes WHERE booking_id = ? AND professional_id = ?')
-      .get(booking_id, req.user!.id);
-    if (existing) {
+    const { rows: existRows } = await db.query(
+      'SELECT id FROM quotes WHERE booking_id = $1 AND professional_id = $2',
+      [booking_id, req.user!.id]
+    );
+    if (existRows.length > 0) {
       fail(res, 'You have already submitted a quote for this booking', 409);
       return;
     }
 
     const id = uuidv4();
-    db.prepare(
-      'INSERT INTO quotes (id, booking_id, professional_id, amount, note) VALUES (?, ?, ?, ?, ?)'
-    ).run(id, booking_id, req.user!.id, amount, note ?? null);
+    await db.query(
+      'INSERT INTO quotes (id, booking_id, professional_id, amount, note) VALUES ($1,$2,$3,$4,$5)',
+      [id, booking_id, req.user!.id, amount, note ?? null]
+    );
 
-    // Mark booking as having at least one quote so the resident sees the quote badge.
-    db.prepare("UPDATE bookings SET status = 'quoted' WHERE id = ? AND status = 'pending_quote'").run(booking_id);
+    await db.query(
+      "UPDATE bookings SET status = 'quoted' WHERE id = $1 AND status = 'pending_quote'",
+      [booking_id]
+    );
 
-    const quote = db.prepare(`
+    const { rows: qRows } = await db.query(`
       SELECT q.*, u.name AS professional_name, p.rating AS professional_rating
       FROM quotes q
       JOIN users u ON u.id = q.professional_id
       LEFT JOIN professionals p ON p.user_id = q.professional_id
-      WHERE q.id = ?
-    `).get(id);
+      WHERE q.id = $1
+    `, [id]);
+    const quote = qRows[0];
 
     getIo()?.to(`booking_${booking_id}`).emit('new_quote', quote);
-
     ok(res, quote, 201);
   } catch (err) {
     console.error('[POST /quotes]', err);
@@ -116,11 +127,10 @@ router.post('/', requireRole('professional'), (req: AuthRequest, res: Response):
 });
 
 // ── PATCH /api/quotes/:id/accept  (resident only) ─────────────────────────────
-router.patch('/:id/accept', requireRole('resident'), (req: AuthRequest, res: Response): void => {
+router.patch('/:id/accept', requireRole('resident'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const quote = db
-      .prepare('SELECT * FROM quotes WHERE id = ?')
-      .get(req.params.id) as
+    const { rows: qRows } = await db.query('SELECT * FROM quotes WHERE id = $1', [req.params.id]);
+    const quote = qRows[0] as
       | { id: string; booking_id: string; professional_id: string; amount: number; status: string }
       | undefined;
 
@@ -133,9 +143,11 @@ router.patch('/:id/accept', requireRole('resident'), (req: AuthRequest, res: Res
       return;
     }
 
-    const booking = db
-      .prepare('SELECT id, resident_id, status FROM bookings WHERE id = ?')
-      .get(quote.booking_id) as { id: string; resident_id: string; status: string } | undefined;
+    const { rows: bRows } = await db.query(
+      'SELECT id, resident_id, status FROM bookings WHERE id = $1',
+      [quote.booking_id]
+    );
+    const booking = bRows[0] as { id: string; resident_id: string; status: string } | undefined;
 
     if (!booking) {
       fail(res, 'Booking not found', 404);
@@ -150,19 +162,20 @@ router.patch('/:id/accept', requireRole('resident'), (req: AuthRequest, res: Res
       return;
     }
 
-    // Accept this quote, reject all others on the same booking.
-    db.prepare("UPDATE quotes SET status = 'accepted' WHERE id = ?").run(quote.id);
-    db.prepare("UPDATE quotes SET status = 'rejected' WHERE booking_id = ? AND id != ?")
-      .run(quote.booking_id, quote.id);
+    await db.query("UPDATE quotes SET status = 'accepted' WHERE id = $1", [quote.id]);
+    await db.query(
+      "UPDATE quotes SET status = 'rejected' WHERE booking_id = $1 AND id != $2",
+      [quote.booking_id, quote.id]
+    );
 
-    // Confirm the booking and assign the professional.
-    db.prepare(`
+    await db.query(`
       UPDATE bookings
-      SET status = 'confirmed', professional_id = ?, quote_amount = ?
-      WHERE id = ?
-    `).run(quote.professional_id, quote.amount, quote.booking_id);
+      SET status = 'confirmed', professional_id = $1, quote_amount = $2
+      WHERE id = $3
+    `, [quote.professional_id, quote.amount, quote.booking_id]);
 
-    const updatedBooking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(quote.booking_id);
+    const { rows: updRows } = await db.query('SELECT * FROM bookings WHERE id = $1', [quote.booking_id]);
+    const updatedBooking = updRows[0];
     getIo()?.to(`booking_${quote.booking_id}`).emit('quote_accepted', updatedBooking);
 
     ok(res, updatedBooking);
