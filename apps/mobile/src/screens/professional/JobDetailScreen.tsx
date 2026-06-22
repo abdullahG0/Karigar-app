@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator,
@@ -38,6 +38,7 @@ export default function JobDetailScreen({ route, navigation }: Props) {
   const [booking, setBooking]   = useState<Booking | null>(null);
   const [loading, setLoading]   = useState(true);
   const [updating, setUpdating] = useState(false);
+  const updatingRef             = useRef(false); // synchronous guard against double-tap
 
   const fetchBooking = useCallback(async () => {
     try {
@@ -55,6 +56,8 @@ export default function JobDetailScreen({ route, navigation }: Props) {
   }, [fetchBooking]));
 
   async function patchStatus(status: string) {
+    if (updatingRef.current) return; // block any second tap before state re-renders
+    updatingRef.current = true;
     setUpdating(true);
     try {
       await api.patch(`/bookings/${booking_id}/status`, { status });
@@ -62,6 +65,7 @@ export default function JobDetailScreen({ route, navigation }: Props) {
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Could not update status.');
     } finally {
+      updatingRef.current = false;
       setUpdating(false);
     }
   }

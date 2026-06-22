@@ -26,21 +26,32 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
       `, [userId]);
       rows = result.rows;
     } else if (role === 'professional') {
+      // Condition 1: bookings assigned to this professional (any status)
+      // Condition 2: open new requests — pending_quote only, in their categories,
+      //              and they haven't already submitted a quote for it.
+      //              (once they quote, status becomes 'quoted' so condition 2
+      //               is already excluded; the NOT EXISTS is an extra safety net)
       const result = await db.query(`
-        SELECT DISTINCT b.*, sc.name AS category_name,
+        SELECT DISTINCT ON (b.id) b.*, sc.name AS category_name,
                ur.name AS resident_name
         FROM bookings b
         JOIN service_categories sc ON sc.id = b.category_id
         JOIN users ur ON ur.id = b.resident_id
         WHERE b.professional_id = $1
-           OR (b.status IN ('pending_quote','quoted') AND b.category_id IN (
+           OR (b.status = 'pending_quote' AND b.category_id IN (
                  SELECT pc.category_id
                  FROM professional_categories pc
                  JOIN professionals p ON p.id = pc.professional_id
                  WHERE p.user_id = $2
+               ) AND NOT EXISTS (
+                 SELECT 1 FROM quotes q WHERE q.booking_id = b.id AND q.professional_id = $1
                ))
-        ORDER BY b.created_at DESC
+        ORDER BY b.id, b.created_at DESC
       `, [userId, userId]);
+      // Re-sort by created_at after DISTINCT ON deduplication
+      result.rows.sort((a: any, b: any) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
       rows = result.rows;
     } else {
       const result = await db.query(`

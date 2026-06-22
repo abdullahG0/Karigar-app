@@ -56,7 +56,10 @@ export default function DashboardScreen() {
         api.get('/bookings'),
       ]);
       setPro(proRes.data);
-      setBookings(bkgRes.data ?? []);
+      // Deduplicate by id in case of any network/render race
+      const seen = new Set<string>();
+      const unique = (bkgRes.data ?? []).filter((b: Booking) => seen.has(b.id) ? false : seen.add(b.id) && true);
+      setBookings(unique);
     } catch {
       // keep stale on error
     } finally {
