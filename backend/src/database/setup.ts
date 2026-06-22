@@ -1,4 +1,9 @@
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
+
+// By default pg returns NUMERIC as strings and BIGINT (COUNT) as strings.
+// Parse them to native JS numbers so the mobile client doesn't get surprised.
+types.setTypeParser(1700, (val) => parseFloat(val));  // NUMERIC / DECIMAL
+types.setTypeParser(20,   (val) => parseInt(val, 10)); // INT8 / BIGINT (COUNT)
 
 let _pool: Pool | null = null;
 
