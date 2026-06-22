@@ -13,6 +13,7 @@ import Avatar from '../../components/Avatar';
 import StarRating from '../../components/StarRating';
 import { useAuthStore } from '../../stores/authStore';
 import { colors, spacing, radius } from '../../theme';
+import { formatDateTime } from '../../utils/dateUtils';
 import type { ResidentStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<ResidentStackParamList, 'BookingDetail'>;
@@ -81,16 +82,6 @@ const STATUS_CONFIGS: Record<string, StatusConfig> = {
   },
 };
 
-function formatDate(str: string) {
-  try {
-    return new Date(str).toLocaleString('en-PK', {
-      day: 'numeric', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  } catch {
-    return str;
-  }
-}
 
 export default function BookingDetailScreen({ route, navigation }: Props) {
   const { booking_id } = route.params;
@@ -189,7 +180,7 @@ export default function BookingDetailScreen({ route, navigation }: Props) {
           <Text style={styles.sectionTitle}>Booking Details</Text>
           <DetailRow label="Service"   value={booking.category_name} />
           <DetailRow label="Address"   value={booking.address} />
-          <DetailRow label="Scheduled" value={formatDate(booking.scheduled_at)} />
+          <DetailRow label="Scheduled" value={formatDateTime(booking.scheduled_at)} />
           <DetailRow label="Problem"   value={booking.problem_description} />
           {booking.quote_amount != null && (
             <DetailRow label="Agreed Amount" value={`PKR ${booking.quote_amount.toLocaleString()}`} />

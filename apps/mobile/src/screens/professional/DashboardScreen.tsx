@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Switch, RefreshControl, ScrollView,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import api from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
 import ProfessionalTabBar from '../../components/ProfessionalTabBar';
 import { colors, spacing, radius } from '../../theme';
+import { timeAgo } from '../../utils/dateUtils';
 import type { ProfessionalStackParamList } from '../../navigation/types';
 
 type Nav = NativeStackNavigationProp<ProfessionalStackParamList, 'Dashboard'>;
@@ -37,16 +38,6 @@ interface Booking {
   created_at: string;
 }
 
-function timeAgo(isoStr: string): string {
-  const diff = Date.now() - new Date(isoStr).getTime();
-  const m = Math.floor(diff / 60_000);
-  const h = Math.floor(m / 60);
-  const d = Math.floor(h / 24);
-  if (d > 0) return `${d}d ago`;
-  if (h > 0) return `${h}h ago`;
-  if (m > 0) return `${m}m ago`;
-  return 'Just now';
-}
 
 export default function DashboardScreen() {
   const navigation = useNavigation<Nav>();
@@ -74,7 +65,7 @@ export default function DashboardScreen() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

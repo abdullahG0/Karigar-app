@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,6 +11,7 @@ import EmptyState from '../../components/EmptyState';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import ProfessionalTabBar from '../../components/ProfessionalTabBar';
 import { colors, spacing, radius, STATUS_CONFIG } from '../../theme';
+import { formatDate } from '../../utils/dateUtils';
 import type { ProfessionalStackParamList } from '../../navigation/types';
 
 type Nav = NativeStackNavigationProp<ProfessionalStackParamList, 'Jobs'>;
@@ -28,13 +29,6 @@ interface Booking {
   resident_name: string;
 }
 
-function formatDate(str: string) {
-  try {
-    return new Date(str).toLocaleDateString('en-PK', {
-      day: 'numeric', month: 'short', year: 'numeric',
-    });
-  } catch { return str; }
-}
 
 export default function JobsScreen() {
   const navigation = useNavigation<Nav>();
@@ -56,7 +50,7 @@ export default function JobsScreen() {
     }
   }, []);
 
-  useEffect(() => { fetchBookings(); }, [fetchBookings]);
+  useFocusEffect(useCallback(() => { fetchBookings(); }, [fetchBookings]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

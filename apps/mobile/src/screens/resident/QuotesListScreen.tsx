@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Modal, ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import api from '../../api/client';
@@ -34,12 +35,14 @@ export default function QuotesListScreen({ route, navigation }: Props) {
   const [pending, setPending]         = useState<Quote | null>(null); // confirmation sheet
   const [accepting, setAccepting]     = useState(false);
 
-  useEffect(() => {
-    api.get(`/quotes/booking/${booking_id}`)
-      .then((r) => setQuotes(r.data ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [booking_id]);
+  useFocusEffect(
+    useCallback(() => {
+      api.get(`/quotes/booking/${booking_id}`)
+        .then((r) => setQuotes(r.data ?? []))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }, [booking_id])
+  );
 
   async function acceptQuote() {
     if (!pending) return;

@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Switch, RefreshControl, ActivityIndicator,
+  Switch, RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import api from '../../api/client';
@@ -44,7 +45,7 @@ export default function ProfileScreen() {
     }
   }, []);
 
-  useEffect(() => { fetchProfile(); }, [fetchProfile]);
+  useFocusEffect(useCallback(() => { fetchProfile(); }, [fetchProfile]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -59,7 +60,7 @@ export default function ProfileScreen() {
       const { data } = await api.patch('/professionals/me/availability', { is_available: next });
       setPro((p) => p ? { ...p, is_available: data.is_available } : p);
     } catch {
-      // no-op
+      Alert.alert('Error', 'Could not update availability. Please try again.');
     } finally {
       setToggling(false);
     }

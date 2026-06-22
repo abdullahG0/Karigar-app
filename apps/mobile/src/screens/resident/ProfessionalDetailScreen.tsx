@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -54,18 +54,19 @@ export default function ProfessionalDetailScreen({ route }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
 
-  useEffect(() => {
-    api.get(`/professionals/${professional_id}`)
-      .then((res) => {
-        setPro(res.data);
-        // Fetch reviews using professional's user_id (what the reviews table stores).
-        api.get(`/reviews/professional/${res.data.user_id}`)
-          .then((r) => setReviews((r.data ?? []).slice(0, 5)))
-          .catch(() => {}); // silent — profile still usable without reviews
-      })
-      .catch((err) => setError(err.message ?? 'Failed to load'))
-      .finally(() => setLoading(false));
-  }, [professional_id]);
+  useFocusEffect(
+    useCallback(() => {
+      api.get(`/professionals/${professional_id}`)
+        .then((res) => {
+          setPro(res.data);
+          api.get(`/reviews/professional/${res.data.user_id}`)
+            .then((r) => setReviews((r.data ?? []).slice(0, 5)))
+            .catch(() => {});
+        })
+        .catch((err) => setError(err.message ?? 'Failed to load'))
+        .finally(() => setLoading(false));
+    }, [professional_id])
+  );
 
   if (loading) return <LoadingSpinner />;
   if (error || !pro) {

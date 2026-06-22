@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../../api/client';
 import StarRating from '../../components/StarRating';
 import { colors, spacing, radius } from '../../theme';
+import { formatDateTime } from '../../utils/dateUtils';
 import type { ProfessionalStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<ProfessionalStackParamList, 'JobDetail'>;
@@ -30,14 +31,6 @@ interface Booking {
   review: Review | null;
 }
 
-function formatDate(str: string) {
-  try {
-    return new Date(str).toLocaleString('en-PK', {
-      day: 'numeric', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  } catch { return str; }
-}
 
 export default function JobDetailScreen({ route, navigation }: Props) {
   const { booking_id } = route.params;
@@ -158,7 +151,7 @@ export default function JobDetailScreen({ route, navigation }: Props) {
           <DetailRow label="Service"   value={booking.category_name} />
           <DetailRow label="Problem"   value={booking.problem_description} />
           <DetailRow label="Address"   value={booking.address} />
-          <DetailRow label="Scheduled" value={formatDate(booking.scheduled_at)} />
+          <DetailRow label="Scheduled" value={formatDateTime(booking.scheduled_at)} />
           {booking.quote_amount != null && (
             <DetailRow label="Amount" value={`PKR ${booking.quote_amount.toLocaleString()}`} />
           )}

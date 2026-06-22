@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import api from '../../api/client';
@@ -35,13 +35,15 @@ export default function ProfessionalListScreen({ navigation: nav, route }: Props
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    nav.setOptions({ title: category_name });
-    api.get(`/professionals?category_id=${category_id}`)
-      .then((res) => setProfessionals(res.data ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [category_id]);
+  useFocusEffect(
+    useCallback(() => {
+      nav.setOptions({ title: category_name });
+      api.get(`/professionals?category_id=${category_id}`)
+        .then((res) => setProfessionals(res.data ?? []))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }, [category_id, nav, category_name])
+  );
 
   const isAvailable = (p: Professional) =>
     p.is_available === true || p.is_available === 1;

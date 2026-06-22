@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import EmptyState from '../../components/EmptyState';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import BottomTabBar from '../../components/BottomTabBar';
 import { colors, spacing, radius, STATUS_CONFIG, ICON_MAP } from '../../theme';
+import { formatDate } from '../../utils/dateUtils';
 import type { ResidentStackParamList } from '../../navigation/types';
 
 type Nav = NativeStackNavigationProp<ResidentStackParamList, 'MyBookings'>;
@@ -50,11 +51,7 @@ function applyFilter(bookings: Booking[], filter: FilterKey): Booking[] {
   }
 }
 
-function formatDate(str: string) {
-  try {
-    return new Date(str).toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: 'numeric' });
-  } catch { return str; }
-}
+
 
 export default function MyBookingsScreen() {
   const navigation = useNavigation<Nav>();
@@ -85,7 +82,7 @@ export default function MyBookingsScreen() {
     }
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useFocusEffect(useCallback(() => { fetchAll(); }, [fetchAll]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

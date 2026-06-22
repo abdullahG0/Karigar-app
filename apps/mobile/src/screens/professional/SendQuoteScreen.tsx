@@ -8,6 +8,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import api from '../../api/client';
 import { colors, spacing, radius } from '../../theme';
+import { formatDateTime } from '../../utils/dateUtils';
 import type { ProfessionalStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<ProfessionalStackParamList, 'SendQuote'>;
@@ -18,15 +19,6 @@ interface BookingDetail {
   problem_description: string;
   address: string;
   scheduled_at: string;
-}
-
-function formatDate(str: string) {
-  try {
-    return new Date(str).toLocaleString('en-PK', {
-      day: 'numeric', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  } catch { return str; }
 }
 
 export default function SendQuoteScreen({ route, navigation }: Props) {
@@ -64,7 +56,7 @@ export default function SendQuoteScreen({ route, navigation }: Props) {
         note: note.trim() || undefined,
       });
       Alert.alert('Quote Sent', 'The resident will be notified.', [
-        { text: 'OK', onPress: () => navigation.navigate('Dashboard') },
+        { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (err: any) {
       setErrors({ submit: err.message ?? 'Could not send quote. Please try again.' });
@@ -95,7 +87,7 @@ export default function SendQuoteScreen({ route, navigation }: Props) {
               <DetailRow label="Service"   value={booking.category_name} />
               <DetailRow label="Problem"   value={booking.problem_description} />
               <DetailRow label="Address"   value={booking.address} />
-              <DetailRow label="Preferred" value={formatDate(booking.scheduled_at)} />
+              <DetailRow label="Preferred" value={formatDateTime(booking.scheduled_at)} />
             </>
           ) : (
             <Text style={styles.errText}>Could not load booking details.</Text>
